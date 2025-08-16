@@ -57,16 +57,12 @@ MODEL_PATH = "./modelos"
 # Mostrar contenido para verificación
 st.write("Ruta de datos:", DATA_PATH)
 st.write("Archivos en data:", os.listdir(DATA_PATH))
-st.write("Ruta de modelos:", MODEL_PATH)
-st.write("Archivos en modelos:", os.listdir(MODEL_PATH))
 
-def t(key):
-    lang = st.session_state.get("lang", "es")
-    return translations.get(key, {}).get(lang, key)
+def traducir(key):
+    lenguaje = st.session_state.get("lang", "es")
+    return traducciones.get(key, {}).get(lenguaje, key)
 
-
-
-required_files = {
+archivos_requeridos = {
     'ADMISSIONS': 'ADMISSIONS.csv',
     'PATIENTS': 'PATIENTS.csv',
     'PROCEDURES': 'PROCEDURES_ICD.csv',
@@ -74,7 +70,7 @@ required_files = {
 }
 
 dfs = {}
-for name, filename in required_files.items():
+for name, filename in archivos_requeridos.items():
     filepath = os.path.join(DATA_PATH, filename)
     try:
         dfs[name] = pd.read_csv(filepath, encoding='utf-8', low_memory=False)
@@ -93,27 +89,27 @@ for name, filename in required_files.items():
 # =========================
 #  UTILIDADES DE PREPROCESO
 # =========================
-def map_icd_to_surgery(icd_code):
+def map_icd_a_cirugia(icd_code):
     """Mapea rangos de ICD9 a macro-tipos de cirugía (aprox)."""
     try:
-        code = float(str(icd_code).split('.')[0])  # soporta "9955", "45.13", etc.
-        if 30 <= code <= 34: return 'Cardiovascular'
-        elif 35 <= code <= 39: return 'Torácica'
-        elif 40 <= code <= 41: return 'Hematolinfática'
-        elif 42 <= code <= 54: return 'Digestiva'
-        elif 76 <= code <= 84: return 'Ortopédica'
+        codigo = float(str(icd_code).split('.')[0])  # soporta "9955", "45.13", etc.
+        if 30 <= codigo <= 34: return 'Cardiovascular'
+        elif 35 <= codigo <= 39: return 'Torácica'
+        elif 40 <= codigo <= 41: return 'Hematolinfática'
+        elif 42 <= codigo <= 54: return 'Digestiva'
+        elif 76 <= codigo <= 84: return 'Ortopédica'
         else: return 'Otros'
     except Exception:
         return 'Otros'
 
-def safe_select(df, candidates, default=None):
+def seleccion_segura(df, candidates, default=None):
     """Devuelve la primera columna que exista en df de la lista candidates."""
     for c in candidates:
         if c in df.columns:
             return c
     return default
 
-def ensure_series_temporal(df, seed=42, length=60):
+def asegurar_serie_temporal(df, seed=42, length=60):
     if df.empty:
         st.warning("DataFrame vacío: no se pueden generar series temporales.")
         df['Serie_Temporal'] = []
@@ -134,7 +130,7 @@ def ensure_series_temporal(df, seed=42, length=60):
     comorb = df.get('COMORBILIDADES', pd.Series(0, index=df.index)).fillna(0).to_numpy()
     rec = df.get('TIEMPO_RECUPERACION', pd.Series(0, index=df.index)).fillna(df['TIEMPO_RECUPERACION'].median() if 'TIEMPO_RECUPERACION' in df else 0).to_numpy()
 
-    def safe_normalize(arr):
+    def normalizar_seguro(arr):
         if len(arr) == 0:
             return np.array([])
         min_val, max_val = np.nanmin(arr), np.nanmax(arr)
@@ -142,7 +138,7 @@ def ensure_series_temporal(df, seed=42, length=60):
             return np.zeros_like(arr)
         return (arr - min_val) / (max_val - min_val)
 
-    edad_n, com_n, rec_n = safe_normalize(edad), safe_normalize(comorb), safe_normalize(rec)
+    edad_n, com_n, rec_n = normalizar_seguro(edad), normalizar_seguro(comorb), normalizar_seguro(rec)
 
     series = []
     t = np.linspace(0, 2*np.pi, L)
@@ -163,7 +159,7 @@ def ensure_series_temporal(df, seed=42, length=60):
 #  PREPROCESAMIENTO PRINCIPAL
 # =========================
 @st.cache_data(show_spinner=False)
-def load_and_preprocess_data():
+def cargar_y_preprocesar_datos():
     # Validar archivos esenciales
     global dfs
     if dfs['ADMISSIONS'] is None or dfs['ADMISSIONS'].empty or \
@@ -229,7 +225,7 @@ def load_and_preprocess_data():
 
     # Tipo de cirugía
     if 'ICD9_CODE' in df.columns:
-        df['TIPO_CIRUGIA'] = df['ICD9_CODE'].apply(map_icd_to_surgery)
+        df['TIPO_CIRUGIA'] = df['ICD9_CODE'].apply(map_icd_a_cirugia)
     else:
         df['TIPO_CIRUGIA'] = 'Otros'
 
@@ -246,7 +242,7 @@ def load_and_preprocess_data():
     df['CLASE_RECUPERACION'] = pd.cut(df['TIEMPO_RECUPERACION'], bins=bins, labels=labels)
 
     # Serie temporal sintética
-    df = ensure_series_temporal(df, seed=42, length=60)
+    df = asegurar_serie_temporal(df, seed=42, length=60)
 
     # Sexo
     if 'GENDER' in df.columns:
@@ -266,21 +262,21 @@ def load_and_preprocess_data():
 # Carga global (para toda la app)
 # --- Carga de archivos ---
 
-df = load_and_preprocess_data()
+df = cargar_y_preprocesar_datos()
 if df is None or df.empty:
     st.warning("No se pudieron procesar los datos. Verifica los archivos subidos.")
     st.stop()
 
 st.success("Datos cargados y procesados correctamente")
 st.dataframe(df.head())
-def evaluate_model(model, X_test, y_test, name):
+def evaluar_modelo(model, X_test, y_test, name):
     """
     Evalúa un modelo multi-clase, generando:
     - Matriz de confusión (mapa de calor)
     - Reporte de clasificación
     - Curva ROC y AUC (multi-clase)
     """
-    num_classes = y_test.shape[1] if len(y_test.shape) > 1 else len(np.unique(y_test))
+    numero_clases = y_test.shape[1] if len(y_test.shape) > 1 else len(np.unique(y_test))
 
     # Predicciones
     y_pred_prob = model.predict(X_test)
@@ -301,19 +297,19 @@ def evaluate_model(model, X_test, y_test, name):
     # Curva ROC / AUC (multi-clase)
     try:
         from sklearn.preprocessing import label_binarize
-        y_test_bin = label_binarize(y_test_classes, classes=range(num_classes))
+        y_test_bin = label_binarize(y_test_classes, classes=range(numero_clases))
         fpr = dict()
         tpr = dict()
         roc_auc = dict()
-        for i in range(num_classes):
+        for i in range(numero_clases):
             fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_pred_prob[:, i])
             roc_auc[i] = auc(fpr[i], tpr[i])
         # Promedio macro
-        all_fpr = np.unique(np.concatenate([fpr[i] for i in range(num_classes)]))
+        all_fpr = np.unique(np.concatenate([fpr[i] for i in range(numero_clases)]))
         mean_tpr = np.zeros_like(all_fpr)
-        for i in range(num_classes):
+        for i in range(numero_clases):
             mean_tpr += np.interp(all_fpr, fpr[i], tpr[i])
-        mean_tpr /= num_classes
+        mean_tpr /= numero_clases
         fpr["macro"] = all_fpr
         tpr["macro"] = mean_tpr
         roc_auc["macro"] = auc(fpr["macro"], tpr["macro"])
@@ -369,9 +365,9 @@ def evaluate_model(model, X_test, y_test, name):
 # =========================
 #    MODELOS DE DEEP LEARNING
 # =========================
-def create_cnn_model(input_shape, num_classes, learning_rate=0.001):
-    model = Sequential([
-        Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=input_shape, padding='same'),
+def crear_modelo_cnn(forma_entrada, numero_clases, learning_rate=0.001):
+    modelo = Sequential([
+        Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=forma_entrada, padding='same'),
         BatchNormalization(),
         Conv1D(filters=128, kernel_size=3, activation='relu', padding='same'),
         MaxPooling1D(pool_size=2),
@@ -379,40 +375,40 @@ def create_cnn_model(input_shape, num_classes, learning_rate=0.001):
         Flatten(),
         Dense(128, activation='relu'),
         Dropout(0.5),
-        Dense(num_classes, activation='softmax')
+        Dense(numero_clases, activation='softmax')
     ])
-    model.compile(optimizer=Adam(learning_rate=learning_rate),
+    modelo.compile(optimizer=Adam(learning_rate=learning_rate),
                   loss='categorical_crossentropy',
                   metrics=['accuracy', tf.keras.metrics.AUC(name='auc')])
-    return model
+    return modelo
 
-def create_hybrid_model(tabular_shape, time_series_shape, num_classes):
-    tabular_input = Input(shape=(tabular_shape,))
-    x = Dense(64, activation='relu')(tabular_input)
+def crear_modelo_hibrido(forma_tabular, forma_serie_temporal, numero_clases):
+    entrada_tabular = Input(shape=(forma_tabular,))
+    x = Dense(64, activation='relu')(entrada_tabular)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
 
-    ts_input = Input(shape=time_series_shape)
+    ts_input = Input(shape=forma_serie_temporal)
     y = Conv1D(64, 3, activation='relu', padding='same')(ts_input)
     y = MaxPooling1D(2)(y)
     y = Conv1D(128, 3, activation='relu', padding='same')(y)
     y = MaxPooling1D(2)(y)
     y = Flatten()(y)
 
-    combined = concatenate([x, y])
-    z = Dense(128, activation='relu')(combined)
+    combinado = concatenate([x, y])
+    z = Dense(128, activation='relu')(combinado)
     z = Dropout(0.5)(z)
-    output = Dense(num_classes, activation='softmax')(z)
+    salida = Dense(numero_clases, activation='softmax')(z)
 
-    model = Model(inputs=[tabular_input, ts_input], outputs=output)
-    model.compile(optimizer=Adam(learning_rate=0.001),
+    modelo = Model(inputs=[entrada_tabular, ts_input], outputs=salida)
+    modelo.compile(optimizer=Adam(learning_rate=0.001),
                   loss='categorical_crossentropy',
                   metrics=['accuracy', tf.keras.metrics.AUC(name='auc')])
-    return model
+    return modelo
 
-def create_cnn_lstm_model(time_series_shape, num_classes):
-    model = Sequential([
-        Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=time_series_shape, padding='same'),
+def crear_modelo_cnn_lstm(forma_serie_temporal, numero_clases):
+    modelo = Sequential([
+        Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=forma_serie_temporal, padding='same'),
         BatchNormalization(),
         MaxPooling1D(pool_size=2),
         Dropout(0.3),
@@ -422,20 +418,20 @@ def create_cnn_lstm_model(time_series_shape, num_classes):
         Dropout(0.3),
         Dense(64, activation='relu'),
         Dropout(0.4),
-        Dense(num_classes, activation='softmax')
+        Dense(numero_clases, activation='softmax')
     ])
-    model.compile(optimizer=Adam(learning_rate=0.001),
+    modelo.compile(optimizer=Adam(learning_rate=0.001),
                   loss='categorical_crossentropy',
                   metrics=['accuracy', tf.keras.metrics.AUC(name='auc')])
-    return model
+    return modelo
 
-def create_hybrid_model_with_attention(tabular_shape, time_series_shape, num_classes):
-    tabular_input = Input(shape=(tabular_shape,))
-    x = Dense(64, activation='relu')(tabular_input)
+def crear_modelo_hibrido_con_atencion(tabular_shape, forma_serie_temporal, numero_clases):
+    entrada_tabular = Input(shape=(tabular_shape,))
+    x = Dense(64, activation='relu')(entrada_tabular)
     x = BatchNormalization()(x)
     x = Dropout(0.3)(x)
 
-    ts_input = Input(shape=time_series_shape)
+    ts_input = Input(shape=forma_serie_temporal)
     y = Conv1D(64, 3, activation='relu', padding='same')(ts_input)
     y = MaxPooling1D(2)(y)
     y = Conv1D(128, 3, activation='relu', padding='same')(y)
@@ -445,21 +441,21 @@ def create_hybrid_model_with_attention(tabular_shape, time_series_shape, num_cla
     y = concatenate([y, attn])
     y = Flatten()(y)
 
-    combined = concatenate([x, y])
-    z = Dense(128, activation='relu')(combined)
+    combinado = concatenate([x, y])
+    z = Dense(128, activation='relu')(combinado)
     z = Dropout(0.5)(z)
-    output = Dense(num_classes, activation='softmax')(z)
+    output = Dense(numero_clases, activation='softmax')(z)
 
-    model = Model(inputs=[tabular_input, ts_input], outputs=output)
-    model.compile(optimizer=Adam(learning_rate=0.001),
+    modelo = Model(inputs=[entrada_tabular, ts_input], outputs=output)
+    modelo.compile(optimizer=Adam(learning_rate=0.001),
                   loss='categorical_crossentropy',
                   metrics=['accuracy', tf.keras.metrics.AUC(name='auc')])
-    return model
+    return modelo
 
 # =========================
 #     PREP. DATOS MODELOS
 # =========================
-def prepare_data_for_cnn(input_df):
+def preparar_datos_para_cnn(input_df):
     dfm = input_df.copy()
 
     # Target
@@ -502,7 +498,7 @@ def prepare_data_for_cnn(input_df):
     X_tabular_processed = preprocessor.fit_transform(X_tabular)
 
     # Series temporales
-    # Garantizado por ensure_series_temporal
+    # Garantizado por asegurar_serie_temporal
     X_time_series = np.array(dfm['Serie_Temporal'].tolist())
     if X_time_series.ndim == 2:
         X_time_series = X_time_series[..., np.newaxis]  # (n, L, 1)
@@ -517,7 +513,7 @@ def prepare_data_for_cnn(input_df):
 # =========================
 #   ENTRENAMIENTO/EVALUACIÓN
 # =========================
-def train_and_evaluate_models():
+def entrenar_y_evaluar_modelos():
     import os
     import time
     import tensorflow as tf
@@ -526,12 +522,12 @@ def train_and_evaluate_models():
     from sklearn.metrics import matthews_corrcoef
 
     # Preparar datos
-    X_train_tab, X_test_tab, X_train_ts, X_test_ts, y_train, y_test, preprocessor, le = prepare_data_for_cnn(df)
+    X_train_tab, X_test_tab, X_train_ts, X_test_ts, y_train, y_test, preprocessor, le = preparar_datos_para_cnn(df)
 
     st.header("Entrenamiento de Modelos CNN e Híbridos")
 
-    time_series_shape = (X_train_ts.shape[1], X_train_ts.shape[2])
-    num_classes = y_train.shape[1] if len(y_train.shape) > 1 else len(np.unique(y_train))
+    forma_serie_temporal = (X_train_ts.shape[1], X_train_ts.shape[2])
+    numero_clases = y_train.shape[1] if len(y_train.shape) > 1 else len(np.unique(y_train))
     tabular_shape = X_train_tab.shape[1]
 
     # =====================
@@ -540,12 +536,12 @@ def train_and_evaluate_models():
     MODEL_DIR = "./modelos"
     os.makedirs(MODEL_DIR, exist_ok=True)
 
-    models_config = {
-        'CNN_1D_Simple': {'builder': lambda: create_cnn_model(time_series_shape, num_classes), 'data': 'ts_only'},
-        'CNN_1D_Profunda': {'builder': lambda: create_cnn_model(time_series_shape, num_classes), 'data': 'ts_only'},
-        'CNN_LSTM': {'builder': lambda: create_cnn_lstm_model(time_series_shape, num_classes), 'data': 'ts_only'},
-        'Hibrido_CNN_MLP': {'builder': lambda: create_hybrid_model(tabular_shape, time_series_shape, num_classes), 'data': 'both'},
-        'Hibrido_CNN_Attention': {'builder': lambda: create_hybrid_model_with_attention(tabular_shape, time_series_shape, num_classes), 'data': 'both'}
+    configuracion_modelos = {
+        'CNN_1D_Simple': {'builder': lambda: crear_modelo_cnn(forma_serie_temporal, numero_clases), 'data': 'ts_only'},
+        'CNN_1D_Profunda': {'builder': lambda: crear_modelo_cnn(forma_serie_temporal, numero_clases), 'data': 'ts_only'},
+        'CNN_LSTM': {'builder': lambda: crear_modelo_cnn_lstm(forma_serie_temporal, numero_clases), 'data': 'ts_only'},
+        'Hibrido_CNN_MLP': {'builder': lambda: crear_modelo_hibrido(tabular_shape, forma_serie_temporal, numero_clases), 'data': 'both'},
+        'Hibrido_CNN_Attention': {'builder': lambda: crear_modelo_hibrido_con_atencion(tabular_shape, forma_serie_temporal, numero_clases), 'data': 'both'}
     }
 
     results = []
@@ -555,7 +551,7 @@ def train_and_evaluate_models():
 
     reentrenar = st.session_state.get("reentrenar", False)
 
-    for model_name, config in models_config.items():
+    for model_name, config in configuracion_modelos.items():
         st.write(f"## {model_name}")
         model_path = os.path.join(MODEL_DIR, f"{model_name}.h5")
 
@@ -590,7 +586,7 @@ def train_and_evaluate_models():
 
         # Evaluación
         X_eval = X_test_ts if config['data'] == 'ts_only' else [X_test_tab, X_test_ts]
-        eval_result = evaluate_model(model, X_eval, y_test, model_name)
+        eval_result = evaluar_modelo(model, X_eval, y_test, model_name)
 
         # MCC
         if config['data'] == 'ts_only':
@@ -639,7 +635,7 @@ def diebold_mariano(y_true, y_pred1, y_pred2):
     p_value = 2 * (1 - t.cdf(np.abs(DM_stat), df=len(d)-1))
     return DM_stat, p_value
 
-def display_results_and_statistics(results, trained_models, le, y_test):
+def mostrar_resultados_estadisticas(results, trained_models, le, y_test):
     st.header("Comparación de Modelos")
 
     # DataFrame resultados
@@ -669,7 +665,7 @@ def display_results_and_statistics(results, trained_models, le, y_test):
 
     # Curvas ROC
     st.header("Curvas ROC")
-    X_train_tab, X_test_tab, X_train_ts, X_test_ts, _, _, _, _ = prepare_data_for_cnn(df)
+    X_train_tab, X_test_tab, X_train_ts, X_test_ts, _, _, _, _ = preparar_datos_para_cnn(df)
     model = trained_models[selected_model]
 
     if selected_model.startswith('Hibrido'):
@@ -720,20 +716,10 @@ def display_results_and_statistics(results, trained_models, le, y_test):
 
     return results_df
 
-def load_models_from_drive(model_names):
-    trained_models = {}
-    for model_name in model_names:
-        model_path = os.path.join("modelos", f"{model_name}.h5")
-        if os.path.exists(model_path):
-            trained_models[model_name] = tf.keras.models.load_model(model_path)
-        else:
-            print(f"⚠️ Modelo no encontrado: {model_name}")
-    return trained_models
-
 # =========================
 #    REPORTE EN PDF
 # =========================
-def create_pdf_report_full(results_df, trained_models, eval_results, save_path, lang="es"):
+def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
     from fpdf import FPDF
     import matplotlib.pyplot as plt
     import numpy as np
@@ -748,7 +734,7 @@ def create_pdf_report_full(results_df, trained_models, eval_results, save_path, 
     pdf.set_auto_page_break(auto=True, margin=15)
 
     # Traducciones según idioma
-    texto = translations.get(lang, translations["es"])
+    texto = traducciones.get(lang, traducciones["es"])
 
     # -----------------
     # Título y Resumen
@@ -831,7 +817,7 @@ def create_pdf_report_full(results_df, trained_models, eval_results, save_path, 
 # =========================
 #  CONFIGURACIÓN MULTILENGUAJE
 # =========================
-translations = {
+traducciones = {
     "es": {
         "app_title": "Predicción Avanzada de Tiempo de Recuperación Post-Cirugía",
         "app_description": """Esta aplicación utiliza modelos avanzados de deep learning (CNN y modelos híbridos) para
@@ -1044,9 +1030,7 @@ Esta aplicação permite avaliar e comparar diferentes modelos de redes neurais 
 }
 
 
-def t(key):
-    lang = st.session_state.get("lang", "es")
-    return translations.get(lang, translations["es"]).get(key, key)
+
 
 # =========================
 #       INTERFAZ STREAMLIT
@@ -1056,46 +1040,46 @@ def main():
     if "lang" not in st.session_state:
         st.session_state.lang = "es"
 
-    lang = st.sidebar.selectbox(
+    lenguaje = st.sidebar.selectbox(
         "🌐 Idioma / Language / Idioma",
         options=["es", "en", "pt"],
         format_func=lambda x: {"es": "Español", "en": "English", "pt": "Português"}[x]
     )
-    st.session_state.lang = lang
+    st.session_state.lang = lenguaje
 
-    st.title(t("app_title"))
-    st.write(t("app_description"))
+    st.title(traducir("app_title"))
+    st.write(traducir("app_description"))
 
-    menu = st.sidebar.selectbox(t("menu"), [
-        t("eda"),
-        t("training"),
-        t("results"),
-        t("report"),
-        t("about")
+    menu = st.sidebar.selectbox(traducir("menu"), [
+        traducir("eda"),
+        traducir("training"),
+        traducir("results"),
+        traducir("report"),
+        traducir("about")
     ])
 
-    if menu == t("eda"):
-        st.header(t("eda_header"))
+    if menu == traducir("eda"):
+        st.header(traducir("eda_header"))
 
         if df['CLASE_RECUPERACION'].notna().any():
             fig = px.pie(df.dropna(subset=['CLASE_RECUPERACION']),
                          names='CLASE_RECUPERACION',
-                         title=t("eda_pie_title"))
+                         title=traducir("eda_pie_title"))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info(t("no_classes"))
+            st.info(traducir("no_classes"))
 
         numeric_candidates_x = [c for c in ['EDAD','COMORBILIDADES','TIEMPO_RECUPERACION'] if c in df.columns]
         numeric_candidates_y = [c for c in ['TIEMPO_RECUPERACION','EDAD','COMORBILIDADES'] if c in df.columns]
         color_candidates = ['None'] + [c for c in ['CLASE_RECUPERACION','TIPO_CIRUGIA','GENDER'] if c in df.columns]
 
         if not numeric_candidates_x or not numeric_candidates_y:
-            st.warning(t("no_numeric"))
+            st.warning(traducir("no_numeric"))
         else:
-            st.subheader(t("scatter_relation"))
-            x_axis = st.selectbox(t("var_x"), numeric_candidates_x, index=0)
-            y_axis = st.selectbox(t("var_y"), numeric_candidates_y, index=0)
-            color_by = st.selectbox(t("color_by"), color_candidates, index=0)
+            st.subheader(traducir("scatter_relation"))
+            x_axis = st.selectbox(traducir("var_x"), numeric_candidates_x, index=0)
+            y_axis = st.selectbox(traducir("var_y"), numeric_candidates_y, index=0)
+            color_by = st.selectbox(traducir("color_by"), color_candidates, index=0)
 
             dfx = df.dropna(subset=[x_axis, y_axis]).copy()
             if color_by == 'None':
@@ -1105,7 +1089,7 @@ def main():
                                  title=f"{y_axis} vs {x_axis} (color: {color_by})")
             st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader(t("time_series"))
+        st.subheader(traducir("time_series"))
         if 'Serie_Temporal' in df.columns and len(df) > 0:
             sample_patients = st.slider("Número de pacientes a mostrar", 1, 10, 3)
             fig_ts = go.Figure()
@@ -1115,17 +1099,17 @@ def main():
                     y=row['Serie_Temporal'],
                     name=f"Fila {i} - {row.get('CLASE_RECUPERACION','NA')}"
                 ))
-            fig_ts.update_layout(title=t("time_series"),
+            fig_ts.update_layout(title=traducir("time_series"),
                                  xaxis_title="Tiempo", yaxis_title="Valor Normalizado")
             st.plotly_chart(fig_ts, use_container_width=True)
         else:
-            st.info(t("no_time_series"))
+            st.info(traducir("no_time_series"))
 
-    elif menu == t("training"):
-        if st.button(t("start_training")):
+    elif menu == traducir("training"):
+        if st.button(traducir("start_training")):
             with st.spinner("Entrenando modelos..."):
                 # Entrenamiento y evaluación
-                results, trained_models, history_logs, eval_results, le, y_test = train_and_evaluate_models()
+                results, trained_models, history_logs, eval_results, le, y_test = entrenar_y_evaluar_modelos()
                 
                 # Guardar en session_state
                 st.session_state['results'] = results
@@ -1135,11 +1119,11 @@ def main():
                 st.session_state['le'] = le
                 st.session_state['y_test'] = y_test
                 
-                st.success(t("training_done"))
+                st.success(traducir("training_done"))
 
         # Mostrar tabla resumida de resultados
         if 'results' in st.session_state:
-            st.header(t("train_results"))
+            st.header(traducir("train_results"))
             results_df = pd.DataFrame(st.session_state['results'])
             if 'Matriz_Confusion' in results_df.columns:
                 results_df_no_cm = results_df.drop(columns=['Matriz_Confusion'])
@@ -1147,9 +1131,9 @@ def main():
                 results_df_no_cm = results_df.copy()
             st.dataframe(results_df_no_cm.sort_values(by='AUC', ascending=False))
 
-    elif menu == t("results"):
+    elif menu == traducir("results"):
         if all(k in st.session_state for k in ['results', 'trained_models', 'le', 'eval_results', 'y_test']):
-            results_df = display_results_and_statistics(
+            results_df = mostrar_resultados_estadisticas(
                 st.session_state['results'],
                 st.session_state['trained_models'],
                 st.session_state['le'],
@@ -1157,11 +1141,11 @@ def main():
             )
             st.session_state['results_df'] = results_df
         else:
-            st.warning(t("first_train_warning"))
-    elif menu == t("report"):
+            st.warning(traducir("first_train_warning"))
+    elif menu == traducir("report"):
       if 'results_df' in st.session_state and 'trained_models' in st.session_state and 'eval_results' in st.session_state:
           pdf_path = "/tmp/reporte_modelos.pdf"
-          create_pdf_report_full(
+          crear_pdf(
               results_df=st.session_state['results_df'],
               trained_models=st.session_state['trained_models'],
               eval_results=st.session_state['eval_results'],
@@ -1178,11 +1162,11 @@ def main():
                   mime="application/pdf"
               )
       else:
-          st.warning(t("report_warning"))
+          st.warning(traducir("report_warning"))
 
-    elif menu == t("about"):
-          st.header(t("about_header"))
-          st.write(t("about_text"))
+    elif menu == traducir("about"):
+          st.header(traducir("about_header"))
+          st.write(traducir("about_text"))
 
 # =========================
 #          MAIN
