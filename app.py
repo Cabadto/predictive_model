@@ -1,4 +1,4 @@
-%%writefile app.py
+
 """
 # Aplicación Avanzada de Predicción de Tiempo de Recuperación Post-Cirugía
 
