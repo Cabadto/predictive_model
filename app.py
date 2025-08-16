@@ -1029,7 +1029,9 @@ Esta aplicação permite avaliar e comparar diferentes modelos de redes neurais 
     }
 }
 
-
+def traducir(key):
+    lang = st.session_state.get("lang", "es")
+    return traducciones.get(lang, traducciones["es"]).get(key, key)
 
 
 # =========================
