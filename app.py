@@ -1147,7 +1147,8 @@ def main():
               results_df=st.session_state['results_df'],
               trained_models=st.session_state['trained_models'],
               eval_results=st.session_state['eval_results'],
-              save_path=pdf_path
+              save_path=pdf_path,
+              lang=st.session_state.lang
           )
 
           with open(pdf_path, "rb") as f:
