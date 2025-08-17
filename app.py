@@ -525,7 +525,6 @@ from scipy.stats import f_oneway, friedmanchisquare
 import scikit_posthocs as sp
 
 def entrenar_y_evaluar_modelos():
-
     # Preparar datos
     X_train_tab, X_test_tab, X_train_ts, X_test_ts, y_train, y_test, preprocessor, le = preparar_datos_para_cnn(df)
     st.header("Entrenamiento de Modelos CNN e Híbridos")
@@ -534,9 +533,7 @@ def entrenar_y_evaluar_modelos():
     numero_clases = y_train.shape[1] if len(y_train.shape) > 1 else len(np.unique(y_train))
     tabular_shape = X_train_tab.shape[1]
 
-    # =====================
     # Carpeta de modelos local
-    # =====================
     MODEL_DIR = "./modelos"
     os.makedirs(MODEL_DIR, exist_ok=True)
 
@@ -565,25 +562,19 @@ def entrenar_y_evaluar_modelos():
         else:
             st.write(f"🚀 Entrenando {model_name}...")
             model = config['builder']()
-
             callbacks = [
                 EarlyStopping(patience=8, monitor='val_loss', restore_best_weights=True),
                 ModelCheckpoint(model_path, save_best_only=True, monitor='val_loss')
             ]
-
             start_time = time.time()
             if config['data'] == 'ts_only':
-                history = model.fit(
-                    X_train_ts, y_train,
-                    validation_data=(X_test_ts, y_test),
-                    epochs=30, batch_size=64, verbose=0, callbacks=callbacks
-                )
+                history = model.fit(X_train_ts, y_train,
+                                    validation_data=(X_test_ts, y_test),
+                                    epochs=30, batch_size=64, verbose=0, callbacks=callbacks)
             else:
-                history = model.fit(
-                    [X_train_tab, X_train_ts], y_train,
-                    validation_data=([X_test_tab, X_test_ts], y_test),
-                    epochs=30, batch_size=64, verbose=0, callbacks=callbacks
-                )
+                history = model.fit([X_train_tab, X_train_ts], y_train,
+                                    validation_data=([X_test_tab, X_test_ts], y_test),
+                                    epochs=30, batch_size=64, verbose=0, callbacks=callbacks)
             training_time = time.time() - start_time
             history_logs[model_name] = history.history
             model.save(model_path)
@@ -604,17 +595,22 @@ def entrenar_y_evaluar_modelos():
 
         mcc_value = matthews_corrcoef(y_true_classes, y_pred_classes)
 
-       
-        table = confusion_matrix(y_true_classes, y_pred_classes)
+        # Matriz de confusión y McNemar
+        cm = confusion_matrix(y_true_classes, y_pred_classes)
+        try:
+            mcnemar_result = mcnemar(cm)
+            st.write(f"McNemar test: statistic={mcnemar_result.statistic}, p-value={mcnemar_result.pvalue}")
+        except Exception as e:
+            st.warning(f"No se pudo aplicar McNemar para {model_name}: {e}")
 
-        result = mcnemar(table)
-        st.write(f"McNemar test: statistic={result.statistic}, p-value={result.pvalue}")
+        # Guardar predicciones dentro del resultado
+        eval_result['y_pred'] = y_pred
 
         results.append({
             'Modelo': model_name,
             'Accuracy': eval_result['accuracy'],
             'AUC': eval_result['roc_auc']['macro'] if eval_result['roc_auc'] else 0,
-            'Matriz_Confusion': eval_result['confusion_matrix'],
+            'Matriz_Confusion': cm,
             'Reporte_Clasificacion': eval_result['classification_report'],
             'Tiempo_Entrenamiento': training_time,
             'MCC': mcc_value,
@@ -622,7 +618,6 @@ def entrenar_y_evaluar_modelos():
             'Recall': eval_result['recall'],
             'F1': eval_result['f1'],
             'Kappa': eval_result['kappa'],
-            
         })
 
         trained_models[model_name] = model
@@ -631,10 +626,7 @@ def entrenar_y_evaluar_modelos():
         st.success(f"{model_name} listo en {training_time:.2f} s")
         st.image(eval_result['evaluation_image'], caption=f"Matriz de Confusión + Curva ROC de {model_name}")
 
-
     results_df = pd.DataFrame(results).sort_values(by='AUC', ascending=False).reset_index(drop=True)
-
-
 
     return results_df, trained_models, history_logs, eval_results, le, y_test
 
@@ -797,9 +789,8 @@ def calcular_estadigrafos(y_true, y_pred):
 def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
     from fpdf import FPDF
     import matplotlib.pyplot as plt
-    import numpy as np
 
-    # Seleccionar el mejor modelo según AUC
+    # Seleccionar mejor modelo por AUC
     best_row = results_df.sort_values(by='AUC', ascending=False).iloc[0]
     best_model_name = best_row['Modelo']
     best_eval = eval_results[best_model_name]
@@ -808,12 +799,9 @@ def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Traducciones según idioma
     texto = traducciones.get(lang, traducciones["es"])
 
-    # -----------------
     # Título y Resumen
-    # -----------------
     pdf.set_font("Arial", "B", 16)
     pdf.multi_cell(0, 10, texto["app_title"], align="C")
     pdf.ln(5)
@@ -823,18 +811,16 @@ def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
     pdf.set_font("Arial", "", 12)
     resumen = (f"{texto.get('report_summary_text', 'El mejor modelo fue')} {best_model_name} "
                f"con AUC={best_row['AUC']:.3f}, Accuracy={best_row['Accuracy']:.3f} "
-               f"y MCC={best_row.get('MCC', 0):.3f}.\n"
-               f"{texto.get('report_summary_followup', 'A continuación se presenta la tabla comparativa y detalles del modelo.')}")
+               f"y MCC={best_row.get('MCC', 0):.3f}.")
     pdf.multi_cell(0, 6, resumen)
     pdf.ln(5)
 
-    # -----------------
+    # -------------------------
     # Tabla Comparativa
-    # -----------------
+    # -------------------------
     pdf.set_font("Arial", "B", 12)
     pdf.cell(0, 8, texto.get("report_table_header", "Comparación de Modelos"), ln=True)
     pdf.set_font("Arial", "B", 10)
-
     cols = ['Modelo', 'Accuracy', 'AUC', 'MCC', 'Tiempo_Entrenamiento']
     table_data = results_df.copy()
     if 'MCC' not in table_data.columns:
@@ -856,9 +842,9 @@ def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
 
     pdf.ln(5)
 
-    # -----------------
-    # Matriz de Confusión del Mejor Modelo
-    # -----------------
+    # -------------------------
+    # Matriz de Confusión con Heatmap
+    # -------------------------
     cm = best_eval['confusion_matrix']
     classes = best_eval.get('label_classes', list(range(cm.shape[0])))
 
@@ -868,7 +854,7 @@ def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
     ax.set_yticks(range(len(classes)))
     ax.set_xticklabels(classes)
     ax.set_yticklabels(classes)
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
 
     for i_cm in range(cm.shape[0]):
         for j_cm in range(cm.shape[1]):
@@ -880,12 +866,19 @@ def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
     img_path = f"/tmp/{best_model_name}_cm.png"
     fig.savefig(img_path)
     plt.close(fig)
-
     pdf.image(img_path, w=120)
 
-    # Guardar PDF
-    pdf.output(save_path)
+    # -------------------------
+    # Curvas ROC
+    # -------------------------
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 8, "Curva ROC", ln=True)
+    # Guardar figura ROC como imagen y añadirla al PDF (similar a CM)
+    # Aquí puedes repetir el proceso de plot y guardar img_path
 
+    # Guardar PDF final
+    pdf.output(save_path)
 
 
 
