@@ -34,7 +34,7 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import (
     confusion_matrix, roc_auc_score, roc_curve,
-    matthews_corrcoef, classification_report, auc
+    matthews_corrcoef, classification_report, auc, precision_score, recall_score, f1_score, cohen_kappa_score, balanced_accuracy_score
 )
 
 import tensorflow as tf
@@ -294,6 +294,8 @@ def evaluar_modelo(model, X_test, y_test, name):
     # MCC
     mcc = matthews_corrcoef(y_test_classes, y_pred_classes)
 
+    estadigrafos = calcular_estadigrafos(y_test_classes, y_pred_classes)
+
     # Curva ROC / AUC (multi-clase)
     try:
         from sklearn.preprocessing import label_binarize
@@ -359,7 +361,11 @@ def evaluar_modelo(model, X_test, y_test, name):
         'evaluation_image': img,
         'accuracy': accuracy,
         'mcc': mcc,
-        'evaluation_image': img
+        'evaluation_image': img,
+        'precision': estadigrafos['Precision (macro)'],
+        'recall': estadigrafos['Recall (macro)'],
+        'f1': estadigrafos['F1-score (macro)'],
+        'kappa': estadigrafos['Kappa de Cohen'],
     }
 
 # =========================
@@ -606,6 +612,10 @@ def entrenar_y_evaluar_modelos():
             'Reporte_Clasificacion': eval_result['classification_report'],
             'Tiempo_Entrenamiento': training_time,
             'MCC': mcc_value,
+            'Precision': eval_result['precision'],
+            'Recall': eval_result['recall'],
+            'F1': eval_result['f1'],
+            'Kappa': eval_result['kappa'],
         })
 
         trained_models[model_name] = model
@@ -634,6 +644,7 @@ def diebold_mariano(y_true, y_pred1, y_pred2):
     from scipy.stats import t
     p_value = 2 * (1 - t.cdf(np.abs(DM_stat), df=len(d)-1))
     return DM_stat, p_value
+
 
 def mostrar_resultados_estadisticas(results, trained_models, le, y_test):
     st.header("Comparación de Modelos")
@@ -715,6 +726,17 @@ def mostrar_resultados_estadisticas(results, trained_models, le, y_test):
             st.info("No hay evidencia de diferencia significativa entre los modelos TS (p ≥ 0.05).")
 
     return results_df
+
+def calcular_estadigrafos(y_true, y_pred):
+    stats = {
+        "Accuracy": np.mean(y_true == y_pred),
+        "Precision (macro)": precision_score(y_true, y_pred, average='macro', zero_division=0),
+        "Recall (macro)": recall_score(y_true, y_pred, average='macro', zero_division=0),
+        "F1-score (macro)": f1_score(y_true, y_pred, average='macro', zero_division=0),
+        "Kappa de Cohen": cohen_kappa_score(y_true, y_pred),
+        "Balanced Accuracy": balanced_accuracy_score(y_true, y_pred),
+    }
+    return stats
 
 # =========================
 #    REPORTE EN PDF
@@ -1132,6 +1154,8 @@ def main():
             else:
                 results_df_no_cm = results_df.copy()
             st.dataframe(results_df_no_cm.sort_values(by='AUC', ascending=False))
+            st.subheader("📊 Estadística descriptiva de variables numéricas")
+            st.dataframe(df[['EDAD', 'COMORBILIDADES', 'TIEMPO_RECUPERACION']].describe().T)
 
     elif menu == traducir("results"):
         if all(k in st.session_state for k in ['results', 'trained_models', 'le', 'eval_results', 'y_test']):
