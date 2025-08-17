@@ -627,33 +627,7 @@ def entrenar_y_evaluar_modelos():
 
     results_df = pd.DataFrame(results).sort_values(by='AUC', ascending=False).reset_index(drop=True)
 
-    # ======================================
-    # Comparación estadística de los modelos
-    # ======================================
-    st.subheader("📊 Comparación estadística entre modelos (Test Set)")
 
-    # 🔹 Elegir la métrica para comparar
-    metrica = "F1"   # <-- cámbiala a "AUC" o "F1" si quieres probar otra
-    scores_metric = [results_df.loc[results_df["Modelo"] == m, metrica].values for m in configuracion_modelos.keys()]
-
-    if len(configuracion_modelos) > 2:
-        stat, p = friedmanchisquare(*scores_metric)
-        st.write(f"### Test de Friedman entre modelos (usando {metrica})")
-        st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
-
-        if p < 0.05:
-            st.success("⚡ Diferencias significativas detectadas entre modelos.")
-            posthoc_res = sp.posthoc_nemenyi_friedman(pd.DataFrame(scores_metric).T)
-            posthoc_res.index = configuracion_modelos.keys()
-            posthoc_res.columns = configuracion_modelos.keys()
-            st.write(f"### Post-hoc Nemenyi ({metrica})")
-            st.dataframe(posthoc_res)
-        else:
-            st.info(f"No se encontraron diferencias significativas entre modelos ({metrica}).")
-    else:
-        stat, p = f_oneway(*scores_metric)
-        st.write(f"### ANOVA entre modelos ({metrica})")
-        st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
 
     return results_df, trained_models, history_logs, eval_results, le, y_test
 
