@@ -611,7 +611,7 @@ def entrenar_y_evaluar_modelos():
             'Accuracy': eval_result['accuracy'],
             'AUC': eval_result['roc_auc']['macro'] if eval_result['roc_auc'] else 0,
             'Matriz_Confusion': cm,
-            'Reporte_Clasificacion': eval_result['classification_report'],
+            #'Reporte_Clasificacion': eval_result['classification_report'],
             'Tiempo_Entrenamiento': training_time,
             'MCC': mcc_value,
             'Precision': eval_result['precision'],
