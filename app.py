@@ -257,6 +257,57 @@ def cargar_y_preprocesar_datos():
     print("Columnas disponibles:", df.columns.tolist())
     print(df.head())
 
+    # =========================
+    #     ANÁLISIS EDA
+    # =========================
+    st.header("🔍 Análisis Exploratorio de Datos (EDA)")
+
+    # 1. Valores faltantes
+    st.subheader("Valores faltantes")
+    missing_values = df.isnull().sum()
+    missing_percent = (missing_values / len(df)) * 100
+    missing_df = pd.DataFrame({
+        'Valores Faltantes': missing_values,
+        '% del Total': missing_percent
+    })
+    st.dataframe(missing_df[missing_df['Valores Faltantes'] > 0])
+
+    # 2. Información general
+    st.subheader("Información del DataFrame")
+    st.write("Número de filas:", df.shape[0])
+    st.write("Número de columnas:", df.shape[1])
+    st.write("Tipos de datos:")
+    st.write(df.dtypes)
+
+    # 3. Estadísticas descriptivas
+    st.subheader("Estadísticas descriptivas")
+    st.write(df.describe(include='all'))
+
+    # 4. Visualización de datos faltantes
+    st.subheader("Mapa de calor de valores faltantes")
+    plt.figure(figsize=(10, 6))
+    sns.heatmap(df.isnull(), cbar=False, cmap="viridis")
+    st.pyplot(plt)
+
+    # 5. Distribuciones principales
+    st.subheader("Distribución de variables numéricas")
+    numeric_cols = df.select_dtypes(include=np.number).columns
+    if len(numeric_cols) > 0:
+        fig, axes = plt.subplots(len(numeric_cols), 1, figsize=(8, 4*len(numeric_cols)))
+        if len(numeric_cols) == 1:
+            axes = [axes]
+        for ax, col in zip(axes, numeric_cols):
+            sns.histplot(df[col].dropna(), kde=True, ax=ax)
+            ax.set_title(f"Distribución de {col}")
+        st.pyplot(fig)
+
+    # 6. Variables categóricas
+    st.subheader("Distribución de variables categóricas")
+    categorical_cols = df.select_dtypes(exclude=np.number).columns
+    for col in categorical_cols:
+        st.write(f"Variable: {col}")
+        st.bar_chart(df[col].value_counts().head(10))
+
     return df
 
 # Carga global (para toda la app)
