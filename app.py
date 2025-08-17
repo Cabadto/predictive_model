@@ -1085,14 +1085,53 @@ def main():
     if menu == traducir("eda"):
         st.header(traducir("eda_header"))
 
+        # ======================
+        # 📊 Estadísticos descriptivos
+        # ======================
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        if numeric_cols:
+            st.subheader("📈 Estadísticos descriptivos")
+            col = st.selectbox("Selecciona una variable numérica", numeric_cols)
+
+            if col:
+                media = df[col].mean()
+                mediana = df[col].median()
+                moda = df[col].mode()[0] if not df[col].mode().empty else None
+                varianza = df[col].var()
+                desviacion = df[col].std()
+
+                st.write(f"**Media:** {media:.2f}")
+                st.write(f"**Mediana:** {mediana:.2f}")
+                st.write(f"**Moda:** {moda}")
+                st.write(f"**Varianza:** {varianza:.2f}")
+                st.write(f"**Desviación estándar:** {desviacion:.2f}")
+
+                # Histograma
+                fig, ax = plt.subplots()
+                sns.histplot(df[col].dropna(), kde=True, ax=ax)
+                ax.set_title(f"Distribución de {col}")
+                st.pyplot(fig)
+
+                # Boxplot
+                fig2, ax2 = plt.subplots()
+                sns.boxplot(x=df[col], ax=ax2)
+                ax2.set_title(f"Boxplot de {col}")
+                st.pyplot(fig2)
+
+        # ======================
+        # 🍰 Gráfico de torta (ya lo tenías)
+        # ======================
         if df['CLASE_RECUPERACION'].notna().any():
             fig = px.pie(df.dropna(subset=['CLASE_RECUPERACION']),
-                         names='CLASE_RECUPERACION',
-                         title=traducir("eda_pie_title"))
+                        names='CLASE_RECUPERACION',
+                        title=traducir("eda_pie_title"))
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info(traducir("no_classes"))
 
+        # ======================
+        # 🔹 Scatter dinámico (ya lo tenías)
+        # ======================
         numeric_candidates_x = [c for c in ['EDAD','COMORBILIDADES','TIEMPO_RECUPERACION'] if c in df.columns]
         numeric_candidates_y = [c for c in ['TIEMPO_RECUPERACION','EDAD','COMORBILIDADES'] if c in df.columns]
         color_candidates = ['None'] + [c for c in ['CLASE_RECUPERACION','TIPO_CIRUGIA','GENDER'] if c in df.columns]
@@ -1110,9 +1149,12 @@ def main():
                 fig = px.scatter(dfx, x=x_axis, y=y_axis, title=f"{y_axis} vs {x_axis}")
             else:
                 fig = px.scatter(dfx, x=x_axis, y=y_axis, color=color_by,
-                                 title=f"{y_axis} vs {x_axis} (color: {color_by})")
+                                title=f"{y_axis} vs {x_axis} (color: {color_by})")
             st.plotly_chart(fig, use_container_width=True)
 
+        # ======================
+        # 📈 Serie temporal (ya lo tenías)
+        # ======================
         st.subheader(traducir("time_series"))
         if 'Serie_Temporal' in df.columns and len(df) > 0:
             sample_patients = st.slider("Número de pacientes a mostrar", 1, 10, 3)
@@ -1124,10 +1166,11 @@ def main():
                     name=f"Fila {i} - {row.get('CLASE_RECUPERACION','NA')}"
                 ))
             fig_ts.update_layout(title=traducir("time_series"),
-                                 xaxis_title="Tiempo", yaxis_title="Valor Normalizado")
+                                xaxis_title="Tiempo", yaxis_title="Valor Normalizado")
             st.plotly_chart(fig_ts, use_container_width=True)
         else:
             st.info(traducir("no_time_series"))
+
 
     elif menu == traducir("training"):
         if st.button(traducir("start_training")):
