@@ -285,12 +285,6 @@ def evaluar_modelo(model, X_test, y_test, name):
     # Convertir y_test a clases enteras si es one-hot
     y_test_classes = np.argmax(y_test, axis=1) if len(y_test.shape) > 1 else y_test
 
-    # Convertir y_test a one-hot si es necesario
-    if len(y_test.shape) == 1 or y_test.shape[1] == 1:
-        y_true_one_hot = to_categorical(y_test_classes, num_classes=y_pred_prob.shape[1])
-    else:
-        y_true_one_hot = y_test
-
     # Matriz de confusión
     cm = confusion_matrix(y_test_classes, y_pred_classes)
 
@@ -372,8 +366,6 @@ def evaluar_modelo(model, X_test, y_test, name):
         'recall': estadigrafos['Recall (macro)'],
         'f1': estadigrafos['F1-score (macro)'],
         'kappa': estadigrafos['Kappa de Cohen'],
-        'y_true': y_true_one_hot,   # <- agregado
-        'y_score': y_pred_prob  
     }
 
 # =========================
@@ -605,11 +597,6 @@ def entrenar_y_evaluar_modelos():
 
         # Matriz de confusión y McNemar
         cm = confusion_matrix(y_true_classes, y_pred_classes)
-
-        if len(y_test.shape) == 1 or y_test.shape[1] == 1:  # No es one-hot
-            y_true_one_hot = to_categorical(y_true_classes, num_classes=y_pred.shape[1])
-        else:
-            y_true_one_hot = y_test
         try:
             mcnemar_result = mcnemar(cm)
             st.write(f"McNemar test: statistic={mcnemar_result.statistic}, p-value={mcnemar_result.pvalue}")
@@ -631,8 +618,6 @@ def entrenar_y_evaluar_modelos():
             'Recall': eval_result['recall'],
             'F1': eval_result['f1'],
             'Kappa': eval_result['kappa'],
-            'y_true': y_true_one_hot,   # <- agrega esto
-            'y_score': y_pred  
         })
 
         trained_models[model_name] = model
@@ -883,35 +868,6 @@ def crear_pdf(results_df, trained_models, eval_results, save_path, lang="es"):
     plt.close(fig)
     pdf.image(img_path, w=120)
 
-    # -------------------------
-    # Curvas ROC
-    # -------------------------
-    pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 8, "Curva ROC", ln=True)
-    y_true = best_eval['y_true']          # etiquetas reales
-    y_scores = best_eval['y_score']       # probabilidades o scores predichos
-    classes = best_eval.get('label_classes', list(range(y_scores.shape[1])))
-
-    fig, ax = plt.subplots(figsize=(5, 5))
-
-    for i, class_label in enumerate(classes):
-        fpr, tpr, _ = roc_curve(y_true[:, i], y_scores[:, i])
-        roc_auc = auc(fpr, tpr)
-        ax.plot(fpr, tpr, label=f'{class_label} (AUC = {roc_auc:.2f})')
-
-    ax.plot([0, 1], [0, 1], 'k--', label='Aleatorio')
-    ax.set_xlabel('FPR')
-    ax.set_ylabel('TPR')
-    ax.set_title('Curva ROC Multiclase')
-    ax.legend(loc='lower right')
-    fig.tight_layout()
-
-    roc_img_path = f"/tmp/{best_model_name}_roc.png"
-    fig.savefig(roc_img_path)
-    plt.close(fig)
-
-    pdf.image(roc_img_path, w=160)
 
     # Guardar PDF final
     pdf.output(save_path)
