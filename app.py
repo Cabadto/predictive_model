@@ -257,57 +257,7 @@ def cargar_y_preprocesar_datos():
     print("Columnas disponibles:", df.columns.tolist())
     print(df.head())
 
-
     return df
-
-def analisis_eda(df):
-    st.header("🔍 Análisis Exploratorio de Datos (EDA)")
-
-    # 1. Valores faltantes
-    st.subheader("Valores faltantes")
-    missing_values = df.isnull().sum()
-    missing_percent = (missing_values / len(df)) * 100
-    missing_df = pd.DataFrame({
-        'Valores Faltantes': missing_values,
-        '% del Total': missing_percent
-    })
-    st.dataframe(missing_df[missing_df['Valores Faltantes'] > 0].convert_dtypes())
-
-    # 2. Info general
-    st.subheader("Información del DataFrame")
-    st.write("Número de filas:", df.shape[0])
-    st.write("Número de columnas:", df.shape[1])
-    st.write(df.dtypes)
-
-    # 3. Estadísticas
-    st.subheader("Estadísticas descriptivas")
-    st.write(df.describe(include='all'))
-
-    # 4. Heatmap NaN
-    st.subheader("Mapa de calor de valores faltantes")
-    plt.figure(figsize=(10, 6))
-    sns.heatmap(df.isnull(), cbar=False, cmap="viridis")
-    st.pyplot(plt)
-
-    # 5. Distribución numéricas
-    st.subheader("Distribución de variables numéricas")
-    numeric_cols = df.select_dtypes(include=np.number).columns
-    if len(numeric_cols) > 0:
-        fig, axes = plt.subplots(len(numeric_cols), 1, figsize=(8, 4*len(numeric_cols)))
-        if len(numeric_cols) == 1:
-            axes = [axes]
-        for ax, col in zip(axes, numeric_cols):
-            sns.histplot(df[col].dropna(), kde=True, ax=ax)
-            ax.set_title(f"Distribución de {col}")
-        st.pyplot(fig)
-
-    # 6. Distribución categóricas
-    st.subheader("Distribución de variables categóricas")
-    categorical_cols = df.select_dtypes(exclude=np.number).columns
-    for col in categorical_cols:
-        st.write(f"Variable: {col}")
-        st.bar_chart(df[col].value_counts().head(10))
-
 
 # Carga global (para toda la app)
 # --- Carga de archivos ---
@@ -316,8 +266,6 @@ df = cargar_y_preprocesar_datos()
 if df is None or df.empty:
     st.warning("No se pudieron procesar los datos. Verifica los archivos subidos.")
     st.stop()
-if df is not None:
-    analisis_eda(df)
 
 st.success("Datos cargados y procesados correctamente")
 st.dataframe(df.head())
