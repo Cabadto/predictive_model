@@ -521,15 +521,10 @@ def preparar_datos_para_cnn(input_df):
 # =========================
 from sklearn.model_selection import KFold
 from scipy.stats import f_oneway, friedmanchisquare
-import scikit_posthocs as sp posthoc
+
+import scikit_posthocs as sp
 
 def entrenar_y_evaluar_modelos():
-    import os
-    import time
-    import tensorflow as tf
-    from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
-    import numpy as np
-    from sklearn.metrics import matthews_corrcoef
 
     # Preparar datos
     X_train_tab, X_test_tab, X_train_ts, X_test_ts, y_train, y_test, preprocessor, le = preparar_datos_para_cnn(df)
@@ -656,7 +651,9 @@ def entrenar_y_evaluar_modelos():
     # ======================================
     # Comparación estadística de los modelos
     # ======================================
+    st.subheader("📊 Comparación estadística entre modelos (CV)")
     scores_matrix = list(crossval_scores.values())
+
     if len(configuracion_modelos) > 2:
         stat, p = friedmanchisquare(*scores_matrix)
         st.write("### Test de Friedman entre modelos")
@@ -664,6 +661,7 @@ def entrenar_y_evaluar_modelos():
         if p < 0.05:
             st.success("⚡ Diferencias significativas detectadas entre modelos.")
             posthoc_res = sp.posthoc_nemenyi_friedman(pd.DataFrame(crossval_scores))
+            st.write("### Post-hoc Nemenyi")
             st.dataframe(posthoc_res)
         else:
             st.info("No se encontraron diferencias significativas entre modelos.")
