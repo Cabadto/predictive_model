@@ -626,47 +626,30 @@ def entrenar_y_evaluar_modelos():
         st.success(f"{model_name} listo en {training_time:.2f} s")
         st.image(eval_result['evaluation_image'], caption=f"Matriz de Confusión + Curva ROC de {model_name}")
 
-        # ==============================
-        # Cross-validation con KFold
-        # ==============================
-        kf = KFold(n_splits=3, shuffle=True, random_state=42)
-        for train_idx, val_idx in kf.split(X_train_ts):
-            if config['data'] == 'ts_only':
-                Xtr, Xval = X_train_ts[train_idx], X_train_ts[val_idx]
-                ytr, yval = y_train[train_idx], y_train[val_idx]
-                m = config['builder']()
-                m.fit(Xtr, ytr, epochs=10, batch_size=64, verbose=0)
-                score = m.evaluate(Xval, yval, verbose=0)[1]  # accuracy
-            else:
-                Xtr_tab, Xval_tab = X_train_tab[train_idx], X_train_tab[val_idx]
-                Xtr_ts, Xval_ts = X_train_ts[train_idx], X_train_ts[val_idx]
-                ytr, yval = y_train[train_idx], y_train[val_idx]
-                m = config['builder']()
-                m.fit([Xtr_tab, Xtr_ts], ytr, epochs=10, batch_size=64, verbose=0)
-                score = m.evaluate([Xval_tab, Xval_ts], yval, verbose=0)[1]
-            crossval_scores[model_name].append(score)
 
     results_df = pd.DataFrame(results).sort_values(by='AUC', ascending=False).reset_index(drop=True)
 
     # ======================================
     # Comparación estadística de los modelos
     # ======================================
-    st.subheader("📊 Comparación estadística entre modelos (CV)")
-    scores_matrix = list(crossval_scores.values())
+    st.subheader("📊 Comparación estadística entre modelos (Test Set)")
+
+    metricas_para_comparar = ["Accuracy", "AUC", "F1"]  # puedes elegir las más importantes
+    scores_matrix = [results_df[m] for m in metricas_para_comparar]
 
     if len(configuracion_modelos) > 2:
-        stat, p = friedmanchisquare(*scores_matrix)
+        stat, p = friedmanchisquare(*[results_df[m] for m in metricas_para_comparar])
         st.write("### Test de Friedman entre modelos")
         st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
         if p < 0.05:
             st.success("⚡ Diferencias significativas detectadas entre modelos.")
-            posthoc_res = sp.posthoc_nemenyi_friedman(pd.DataFrame(crossval_scores))
+            posthoc_res = sp.posthoc_nemenyi_friedman(results_df[metricas_para_comparar])
             st.write("### Post-hoc Nemenyi")
             st.dataframe(posthoc_res)
         else:
             st.info("No se encontraron diferencias significativas entre modelos.")
     else:
-        stat, p = f_oneway(*scores_matrix)
+        stat, p = f_oneway(*[results_df[m] for m in metricas_para_comparar])
         st.write("### ANOVA entre modelos")
         st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
 
