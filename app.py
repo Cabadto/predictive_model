@@ -285,6 +285,12 @@ def evaluar_modelo(model, X_test, y_test, name):
     # Convertir y_test a clases enteras si es one-hot
     y_test_classes = np.argmax(y_test, axis=1) if len(y_test.shape) > 1 else y_test
 
+    # Convertir y_test a one-hot si es necesario
+    if len(y_test.shape) == 1 or y_test.shape[1] == 1:
+        y_true_one_hot = to_categorical(y_test_classes, num_classes=y_pred_prob.shape[1])
+    else:
+        y_true_one_hot = y_test
+
     # Matriz de confusión
     cm = confusion_matrix(y_test_classes, y_pred_classes)
 
@@ -366,6 +372,8 @@ def evaluar_modelo(model, X_test, y_test, name):
         'recall': estadigrafos['Recall (macro)'],
         'f1': estadigrafos['F1-score (macro)'],
         'kappa': estadigrafos['Kappa de Cohen'],
+        'y_true': y_true_one_hot,   # <- agregado
+        'y_score': y_pred_prob  
     }
 
 # =========================
