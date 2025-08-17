@@ -519,6 +519,10 @@ def preparar_datos_para_cnn(input_df):
 # =========================
 #   ENTRENAMIENTO/EVALUACIÓN
 # =========================
+from sklearn.model_selection import KFold
+from scipy.stats import f_oneway, friedmanchisquare
+import scikit_posthocs as sp posthoc
+
 def entrenar_y_evaluar_modelos():
     import os
     import time
@@ -529,7 +533,6 @@ def entrenar_y_evaluar_modelos():
 
     # Preparar datos
     X_train_tab, X_test_tab, X_train_ts, X_test_ts, y_train, y_test, preprocessor, le = preparar_datos_para_cnn(df)
-
     st.header("Entrenamiento de Modelos CNN e Híbridos")
 
     forma_serie_temporal = (X_train_ts.shape[1], X_train_ts.shape[2])
@@ -551,10 +554,11 @@ def entrenar_y_evaluar_modelos():
     }
 
     results = []
+    crossval_scores = {m: [] for m in configuracion_modelos.keys()}  # <-- Para CV
+
     trained_models = {}
     history_logs = {}
     eval_results = {}
-
     reentrenar = st.session_state.get("reentrenar", False)
 
     for model_name, config in configuracion_modelos.items():
@@ -568,10 +572,12 @@ def entrenar_y_evaluar_modelos():
         else:
             st.write(f"🚀 Entrenando {model_name}...")
             model = config['builder']()
+
             callbacks = [
                 EarlyStopping(patience=8, monitor='val_loss', restore_best_weights=True),
                 ModelCheckpoint(model_path, save_best_only=True, monitor='val_loss')
             ]
+
             start_time = time.time()
             if config['data'] == 'ts_only':
                 history = model.fit(
@@ -590,11 +596,11 @@ def entrenar_y_evaluar_modelos():
             model.save(model_path)
             st.success(f"💾 Modelo guardado en: {model_path}")
 
-        # Evaluación
+        # Evaluación normal
         X_eval = X_test_ts if config['data'] == 'ts_only' else [X_test_tab, X_test_ts]
         eval_result = evaluar_modelo(model, X_eval, y_test, model_name)
 
-        # MCC
+        # Predicciones
         if config['data'] == 'ts_only':
             y_pred = model.predict(X_test_ts, verbose=0)
         else:
@@ -602,6 +608,7 @@ def entrenar_y_evaluar_modelos():
 
         y_pred_classes = np.argmax(y_pred, axis=1)
         y_true_classes = np.argmax(y_test, axis=1)
+
         mcc_value = matthews_corrcoef(y_true_classes, y_pred_classes)
 
         results.append({
@@ -624,9 +631,48 @@ def entrenar_y_evaluar_modelos():
         st.success(f"{model_name} listo en {training_time:.2f} s")
         st.image(eval_result['evaluation_image'], caption=f"Matriz de Confusión + Curva ROC de {model_name}")
 
-    results_df = pd.DataFrame(results).sort_values(by='AUC', ascending=False).reset_index(drop=True)
-    return results_df, trained_models, history_logs, eval_results, le, y_test
+        # ==============================
+        # Cross-validation con KFold
+        # ==============================
+        kf = KFold(n_splits=3, shuffle=True, random_state=42)
+        for train_idx, val_idx in kf.split(X_train_ts):
+            if config['data'] == 'ts_only':
+                Xtr, Xval = X_train_ts[train_idx], X_train_ts[val_idx]
+                ytr, yval = y_train[train_idx], y_train[val_idx]
+                m = config['builder']()
+                m.fit(Xtr, ytr, epochs=10, batch_size=64, verbose=0)
+                score = m.evaluate(Xval, yval, verbose=0)[1]  # accuracy
+            else:
+                Xtr_tab, Xval_tab = X_train_tab[train_idx], X_train_tab[val_idx]
+                Xtr_ts, Xval_ts = X_train_ts[train_idx], X_train_ts[val_idx]
+                ytr, yval = y_train[train_idx], y_train[val_idx]
+                m = config['builder']()
+                m.fit([Xtr_tab, Xtr_ts], ytr, epochs=10, batch_size=64, verbose=0)
+                score = m.evaluate([Xval_tab, Xval_ts], yval, verbose=0)[1]
+            crossval_scores[model_name].append(score)
 
+    results_df = pd.DataFrame(results).sort_values(by='AUC', ascending=False).reset_index(drop=True)
+
+    # ======================================
+    # Comparación estadística de los modelos
+    # ======================================
+    scores_matrix = list(crossval_scores.values())
+    if len(configuracion_modelos) > 2:
+        stat, p = friedmanchisquare(*scores_matrix)
+        st.write("### Test de Friedman entre modelos")
+        st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
+        if p < 0.05:
+            st.success("⚡ Diferencias significativas detectadas entre modelos.")
+            posthoc_res = sp.posthoc_nemenyi_friedman(pd.DataFrame(crossval_scores))
+            st.dataframe(posthoc_res)
+        else:
+            st.info("No se encontraron diferencias significativas entre modelos.")
+    else:
+        stat, p = f_oneway(*scores_matrix)
+        st.write("### ANOVA entre modelos")
+        st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
+
+    return results_df, trained_models, history_logs, eval_results, le, y_test
 
 # =========================
 #   RESULTADOS Y ESTADÍSTICA
@@ -1210,8 +1256,39 @@ def main():
                 st.session_state['y_test']
             )
             st.session_state['results_df'] = results_df
+
+            # ===============================
+            # 🔹 Comparación estadística entre modelos
+            # ===============================
+            from scipy.stats import friedmanchisquare
+
+            st.subheader("📊 Comparación Estadística de Modelos")
+
+            # Seleccionar métricas relevantes
+            metricas = ["Accuracy", "AUC", "F1", "MCC"]
+            for metrica in metricas:
+                if metrica in results_df.columns:
+                    st.write(f"### {metrica}")
+
+                    # Preparar datos para Friedman test
+                    valores = [results_df.loc[results_df['Modelo'] == m, metrica].values[0] 
+                            for m in results_df['Modelo']]
+
+                    # Nota: aquí idealmente deberías tener resultados por cross-validation (folds),
+                    # pero como tienes solo el agregado, se puede mostrar como ilustrativo.
+                    if len(valores) >= 3:  # Friedman requiere 3+ grupos
+                        try:
+                            stat, p = friedmanchisquare(*[ [v] for v in valores ])
+                            st.write(f"Friedman χ² = {stat:.4f}, p = {p:.4f}")
+                            if p < 0.05:
+                                st.success("✅ Diferencias significativas entre modelos")
+                            else:
+                                st.info("ℹ️ No se encontraron diferencias significativas")
+                        except Exception as e:
+                            st.warning(f"No se pudo aplicar Friedman para {metrica}: {e}")
         else:
             st.warning(traducir("first_train_warning"))
+
     elif menu == traducir("report"):
       if 'results_df' in st.session_state and 'trained_models' in st.session_state and 'eval_results' in st.session_state:
           pdf_path = "/tmp/reporte_modelos.pdf"
