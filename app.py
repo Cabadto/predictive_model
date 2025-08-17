@@ -549,8 +549,6 @@ def entrenar_y_evaluar_modelos():
     }
 
     results = []
-    crossval_scores = {m: [] for m in configuracion_modelos.keys()}  # <-- Para CV
-
     trained_models = {}
     history_logs = {}
     eval_results = {}
@@ -634,32 +632,31 @@ def entrenar_y_evaluar_modelos():
     # ======================================
     st.subheader("📊 Comparación estadística entre modelos (Test Set)")
 
-    # 🔹 Usamos solo AUC para comparar entre modelos
-    scores_auc = [crossval_scores[m] for m in configuracion_modelos.keys()]  
+    # 🔹 Elegir la métrica para comparar
+    metrica = "Accuracy"   # <-- cámbiala a "AUC" o "F1" si quieres probar otra
+    scores_metric = [results_df.loc[results_df["Modelo"] == m, metrica].values for m in configuracion_modelos.keys()]
 
     if len(configuracion_modelos) > 2:
-        # Test de Friedman con los AUC de todos los modelos
-        stat, p = friedmanchisquare(*scores_auc)
-        st.write("### Test de Friedman entre modelos (usando AUC)")
+        stat, p = friedmanchisquare(*scores_metric)
+        st.write(f"### Test de Friedman entre modelos (usando {metrica})")
         st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
 
         if p < 0.05:
             st.success("⚡ Diferencias significativas detectadas entre modelos.")
-            # Post-hoc Nemenyi sobre los mismos resultados de AUC
-            posthoc_res = sp.posthoc_nemenyi_friedman(pd.DataFrame(scores_auc).T)
+            posthoc_res = sp.posthoc_nemenyi_friedman(pd.DataFrame(scores_metric).T)
             posthoc_res.index = configuracion_modelos.keys()
             posthoc_res.columns = configuracion_modelos.keys()
-            st.write("### Post-hoc Nemenyi (AUC)")
+            st.write(f"### Post-hoc Nemenyi ({metrica})")
             st.dataframe(posthoc_res)
         else:
-            st.info("No se encontraron diferencias significativas entre modelos (AUC).")
+            st.info(f"No se encontraron diferencias significativas entre modelos ({metrica}).")
     else:
-        # Si solo hay 2 modelos, se aplica ANOVA directamente
-        stat, p = f_oneway(*scores_auc)
-        st.write("### ANOVA entre modelos (AUC)")
+        stat, p = f_oneway(*scores_metric)
+        st.write(f"### ANOVA entre modelos ({metrica})")
         st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
 
     return results_df, trained_models, history_logs, eval_results, le, y_test
+
 
 # =========================
 #   RESULTADOS Y ESTADÍSTICA
