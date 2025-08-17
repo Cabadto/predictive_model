@@ -47,7 +47,7 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
 from PIL import Image
-
+from statsmodels.stats.contingency_tables import mcnemar
 # =========================
 #  RUTAS LOCALES
 # =========================
@@ -604,6 +604,12 @@ def entrenar_y_evaluar_modelos():
 
         mcc_value = matthews_corrcoef(y_true_classes, y_pred_classes)
 
+       
+        table = confusion_matrix(y_true_classes, y_pred_classes)
+
+        result = mcnemar(table)
+        st.write(f"McNemar test: statistic={result.statistic}, p-value={result.pvalue}")
+
         results.append({
             'Modelo': model_name,
             'Accuracy': eval_result['accuracy'],
@@ -616,6 +622,7 @@ def entrenar_y_evaluar_modelos():
             'Recall': eval_result['recall'],
             'F1': eval_result['f1'],
             'Kappa': eval_result['kappa'],
+            
         })
 
         trained_models[model_name] = model
@@ -651,18 +658,34 @@ def diebold_mariano(y_true, y_pred1, y_pred2):
 
 
 def mostrar_resultados_estadisticas(results, trained_models, le, y_test):
-    st.header("Comparación de Modelos")
+    st.header("📊 Comparación de Modelos y Estadísticas")
 
-    # DataFrame resultados
+    # Crear DataFrame de resultados
     results_df = pd.DataFrame(results)
     results_df_no_cm = results_df.drop(columns=['Matriz_Confusion'], errors='ignore')
+    st.subheader("Tabla de Resultados")
     st.dataframe(results_df_no_cm.sort_values(by='AUC', ascending=False))
 
-    # Barra de AUC
+     # Barra de AUC
     fig = px.bar(results_df_no_cm, x='Modelo', y='AUC', title='Comparación de AUC entre Modelos')
     st.plotly_chart(fig, use_container_width=True)
+    # -------------------------
+    # 6. Estadísticos descriptivos
+    # -------------------------
+    st.subheader("Estadísticos Descriptivos de Métricas")
+    st.write(results_df_no_cm[['Accuracy','AUC','F1','MCC']].describe())
 
-    # Matrices de confusión
+    # -------------------------
+    # 7. Gráficos de métricas
+    # -------------------------
+    st.subheader("Distribución de Métricas entre Modelos")
+    for metrica in ['Accuracy','AUC','F1','MCC']:
+        fig = px.box(results_df_no_cm, y=metrica, points="all", title=f"Distribución de {metrica}")
+        st.plotly_chart(fig)
+
+    # -------------------------
+    # 11. Matriz de Confusión del Mejor Modelo
+    # -------------------------
     st.header("Matrices de Confusión")
     model_names = results_df['Modelo'].tolist()
     selected_model = st.selectbox("Seleccione modelo", model_names)
@@ -673,12 +696,37 @@ def mostrar_resultados_estadisticas(results, trained_models, le, y_test):
 
     classes = le.classes_
     if cm is not None:
+        # Mostrar heatmap interactivo
         fig_cm = px.imshow(cm, labels=dict(x="Predicho", y="Real", color="Cantidad"),
                            x=classes, y=classes, title=f"Matriz de Confusión - {selected_model}",
                            text_auto=True)
         st.plotly_chart(fig_cm, use_container_width=True)
 
-    # Curvas ROC
+        # Estadísticos derivados
+        st.subheader(f"Estadísticos de la Matriz de Confusión - {selected_model}")
+        TP = np.diag(cm)
+        FP = cm.sum(axis=0) - TP
+        FN = cm.sum(axis=1) - TP
+        st.write("TP:", TP, "FP:", FP, "FN:", FN)
+
+    # -------------------------
+    # 12. Validación estadística
+    # -------------------------
+    st.subheader("Validaciones Estadísticas - Clasificación")
+    y_true_classes = np.argmax(y_test, axis=1)
+    y_pred_classes = np.argmax(selected_result['y_pred'], axis=1)
+    mcc_value = matthews_corrcoef(y_true_classes, y_pred_classes)
+    st.write(f"Coeficiente de Matthews: {mcc_value:.3f}")
+
+    # McNemar test
+    from statsmodels.stats.contingency_tables import mcnemar
+    table = confusion_matrix(y_true_classes, y_pred_classes)
+    result = mcnemar(table)
+    st.write(f"McNemar test: statistic={result.statistic}, p-value={result.pvalue:.3f}")
+
+    # -------------------------
+    # Curvas ROC y AUC
+    # -------------------------
     st.header("Curvas ROC")
     X_train_tab, X_test_tab, X_train_ts, X_test_ts, _, _, _, _ = preparar_datos_para_cnn(df)
     model = trained_models[selected_model]
@@ -694,16 +742,16 @@ def mostrar_resultados_estadisticas(results, trained_models, le, y_test):
         auc_i = roc_auc_score(y_test[:, i], y_pred[:, i])
         fig_roc.add_trace(go.Scatter(x=fpr, y=tpr, mode='lines',
                                      name=f"{le.classes_[i]} (AUC={auc_i:.2f})"))
-    fig_roc.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode='lines', name='Aleatorio',
+    fig_roc.add_trace(go.Scatter(x=[0,1], y=[0,1], mode='lines', name='Aleatorio',
                                  line=dict(dash='dash')))
     fig_roc.update_layout(title=f"Curva ROC Multiclase - {selected_model}",
                           xaxis_title="FPR", yaxis_title="TPR")
     st.plotly_chart(fig_roc, use_container_width=True)
 
-    # ===============================
-    # Coeficiente de Theil y DM
-    # ===============================
-    st.header("Pruebas de Validación de Series Temporales")
+    # -------------------------
+    # 13. Series Temporales (Theil y Diebold-Mariano)
+    # -------------------------
+    st.header("Validación de Series Temporales")
     ts_models = [name for name in model_names if not name.startswith('Hibrido')]
     if len(ts_models) >= 2:
         st.subheader("Comparación entre modelos de series temporales")
@@ -730,6 +778,7 @@ def mostrar_resultados_estadisticas(results, trained_models, le, y_test):
             st.info("No hay evidencia de diferencia significativa entre los modelos TS (p ≥ 0.05).")
 
     return results_df
+
 
 def calcular_estadigrafos(y_true, y_pred):
     stats = {
