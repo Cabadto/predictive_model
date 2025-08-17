@@ -1215,35 +1215,6 @@ def main():
             )
             st.session_state['results_df'] = results_df
 
-            # ===============================
-            # 🔹 Comparación estadística entre modelos
-            # ===============================
-            from scipy.stats import friedmanchisquare
-
-            st.subheader("📊 Comparación Estadística de Modelos")
-
-            # Seleccionar métricas relevantes
-            metricas = ["Accuracy", "AUC", "F1", "MCC"]
-            for metrica in metricas:
-                if metrica in results_df.columns:
-                    st.write(f"### {metrica}")
-
-                    # Preparar datos para Friedman test
-                    valores = [results_df.loc[results_df['Modelo'] == m, metrica].values[0] 
-                            for m in results_df['Modelo']]
-
-                    # Nota: aquí idealmente deberías tener resultados por cross-validation (folds),
-                    # pero como tienes solo el agregado, se puede mostrar como ilustrativo.
-                    if len(valores) >= 3:  # Friedman requiere 3+ grupos
-                        try:
-                            stat, p = friedmanchisquare(*[ [v] for v in valores ])
-                            st.write(f"Friedman χ² = {stat:.4f}, p = {p:.4f}")
-                            if p < 0.05:
-                                st.success("✅ Diferencias significativas entre modelos")
-                            else:
-                                st.info("ℹ️ No se encontraron diferencias significativas")
-                        except Exception as e:
-                            st.warning(f"No se pudo aplicar Friedman para {metrica}: {e}")
         else:
             st.warning(traducir("first_train_warning"))
 
