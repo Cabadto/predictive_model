@@ -618,6 +618,7 @@ def entrenar_y_evaluar_modelos():
             'Recall': eval_result['recall'],
             'F1': eval_result['f1'],
             'Kappa': eval_result['kappa'],
+            'McNemar': f"McNemar test: statistic={mcnemar_result.statistic}, p-value={mcnemar_result.pvalue}"
         })
 
         trained_models[model_name] = model
