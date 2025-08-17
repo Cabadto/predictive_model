@@ -634,23 +634,29 @@ def entrenar_y_evaluar_modelos():
     # ======================================
     st.subheader("📊 Comparación estadística entre modelos (Test Set)")
 
-    metricas_para_comparar = ["Accuracy", "AUC", "F1"]  # puedes elegir las más importantes
-    scores_matrix = [results_df[m] for m in metricas_para_comparar]
+    # 🔹 Usamos solo AUC para comparar entre modelos
+    scores_auc = [crossval_scores[m] for m in configuracion_modelos.keys()]  
 
     if len(configuracion_modelos) > 2:
-        stat, p = friedmanchisquare(*[results_df[m] for m in metricas_para_comparar])
-        st.write("### Test de Friedman entre modelos")
+        # Test de Friedman con los AUC de todos los modelos
+        stat, p = friedmanchisquare(*scores_auc)
+        st.write("### Test de Friedman entre modelos (usando AUC)")
         st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
+
         if p < 0.05:
             st.success("⚡ Diferencias significativas detectadas entre modelos.")
-            posthoc_res = sp.posthoc_nemenyi_friedman(results_df[metricas_para_comparar])
-            st.write("### Post-hoc Nemenyi")
+            # Post-hoc Nemenyi sobre los mismos resultados de AUC
+            posthoc_res = sp.posthoc_nemenyi_friedman(pd.DataFrame(scores_auc).T)
+            posthoc_res.index = configuracion_modelos.keys()
+            posthoc_res.columns = configuracion_modelos.keys()
+            st.write("### Post-hoc Nemenyi (AUC)")
             st.dataframe(posthoc_res)
         else:
-            st.info("No se encontraron diferencias significativas entre modelos.")
+            st.info("No se encontraron diferencias significativas entre modelos (AUC).")
     else:
-        stat, p = f_oneway(*[results_df[m] for m in metricas_para_comparar])
-        st.write("### ANOVA entre modelos")
+        # Si solo hay 2 modelos, se aplica ANOVA directamente
+        stat, p = f_oneway(*scores_auc)
+        st.write("### ANOVA entre modelos (AUC)")
         st.write(f"Statistic={stat:.3f}, p-value={p:.3f}")
 
     return results_df, trained_models, history_logs, eval_results, le, y_test
