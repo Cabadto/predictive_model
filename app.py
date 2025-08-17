@@ -633,7 +633,7 @@ def entrenar_y_evaluar_modelos():
     st.subheader("📊 Comparación estadística entre modelos (Test Set)")
 
     # 🔹 Elegir la métrica para comparar
-    metrica = "Accuracy"   # <-- cámbiala a "AUC" o "F1" si quieres probar otra
+    metrica = "F1"   # <-- cámbiala a "AUC" o "F1" si quieres probar otra
     scores_metric = [results_df.loc[results_df["Modelo"] == m, metrica].values for m in configuracion_modelos.keys()]
 
     if len(configuracion_modelos) > 2:
