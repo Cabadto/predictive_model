@@ -597,6 +597,11 @@ def entrenar_y_evaluar_modelos():
 
         # Matriz de confusión y McNemar
         cm = confusion_matrix(y_true_classes, y_pred_classes)
+
+        if len(y_test.shape) == 1 or y_test.shape[1] == 1:  # No es one-hot
+            y_true_one_hot = to_categorical(y_true_classes, num_classes=y_pred.shape[1])
+        else:
+            y_true_one_hot = y_test
         try:
             mcnemar_result = mcnemar(cm)
             st.write(f"McNemar test: statistic={mcnemar_result.statistic}, p-value={mcnemar_result.pvalue}")
@@ -618,6 +623,8 @@ def entrenar_y_evaluar_modelos():
             'Recall': eval_result['recall'],
             'F1': eval_result['f1'],
             'Kappa': eval_result['kappa'],
+            'y_true': y_true_one_hot,   # <- agrega esto
+            'y_score': y_pred  
         })
 
         trained_models[model_name] = model
