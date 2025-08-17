@@ -1088,7 +1088,8 @@ def main():
         # ======================
         # 📊 Estadísticos descriptivos
         # ======================
-        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        #numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        numeric_cols = [c for c in ['EDAD','COMORBILIDADES','TIEMPO_RECUPERACION'] if c in df.columns]
         if numeric_cols:
             st.subheader("📈 Estadísticos descriptivos")
             col = st.selectbox("Selecciona una variable numérica", numeric_cols)
