@@ -554,6 +554,7 @@ def entrenar_y_evaluar_modelos():
     for model_name, config in configuracion_modelos.items():
         st.write(f"## {model_name}")
         model_path = os.path.join(MODEL_DIR, f"{model_name}.h5")
+        history = None 
 
         if os.path.exists(model_path) and not reentrenar:
             st.write(f"🔄 Cargando {model_name} desde local...")
