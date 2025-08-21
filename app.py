@@ -580,6 +580,16 @@ def entrenar_y_evaluar_modelos():
             model.save(model_path)
             st.success(f"💾 Modelo guardado en: {model_path}")
 
+        if history is not None:
+            fig, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(history.history['accuracy'], label='Entrenamiento')
+            ax.plot(history.history['val_accuracy'], label='Validación')
+            ax.set_title(f'Accuracy vs Epochs - {model_name}')
+            ax.set_xlabel('Epochs')
+            ax.set_ylabel('Accuracy')
+            ax.legend()
+            st.pyplot(fig)
+
         # Evaluación normal
         X_eval = X_test_ts if config['data'] == 'ts_only' else [X_test_tab, X_test_ts]
         eval_result = evaluar_modelo(model, X_eval, y_test, model_name)
@@ -626,6 +636,16 @@ def entrenar_y_evaluar_modelos():
 
         st.success(f"{model_name} listo en {training_time:.2f} s")
         st.image(eval_result['evaluation_image'], caption=f"Matriz de Confusión + Curva ROC de {model_name}")
+    
+    # Comparación de accuracy final de cada modelo
+    fig, ax = plt.subplots(figsize=(10, 5))
+    for model_name, hist in history_logs.items():
+        ax.plot(hist['val_accuracy'], label=f'{model_name} (val)')
+    ax.set_title('Comparación de Accuracy (Validación)')
+    ax.set_xlabel('Epochs')
+    ax.set_ylabel('Accuracy')
+    ax.legend()
+    st.pyplot(fig)
 
     results_df = pd.DataFrame(results).sort_values(by='AUC', ascending=False).reset_index(drop=True)
 
